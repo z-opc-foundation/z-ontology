@@ -15,6 +15,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.PriorityQueue;
 import java.util.Set;
 
 /**
@@ -27,11 +28,17 @@ import java.util.Set;
  *   <li>transitive → 传递闭包</li>
  * </ul>
  *
+ * <p>传递闭包按谓词求「最宽路径」（瓶颈权重最大）一次到位，不生成自环推断；
+ * 其余规则仍走不动点迭代。</p>
+ *
  * <p>不做同等性（sameAs）与 OWL 复杂公理；功能性属性只在校验阶段报冲突。</p>
  */
 public class RdfsReasoner {
 
     private static final int MAX_ROUNDS = 1000;
+    private static final int UNCHANGED = 0;
+    private static final int INSERTED = 1;
+    private static final int UPDATED = 2;
 
     public InferenceResult infer(OntologySchema schema, List<Individual> inputIndividuals,
                                  List<Statement> inputStatements) {
@@ -58,8 +65,10 @@ public class RdfsReasoner {
 
         int rounds = 0;
         boolean changed;
+        boolean closureNeeded = true;
         do {
             changed = false;
+            boolean statementsTouched = false;
 
             for (Individual ind : individuals.values()) {
                 for (String type : new ArrayList<>(ind.allTypes())) {
@@ -76,7 +85,10 @@ public class RdfsReasoner {
                     Statement derived = new Statement(s.getSubject(), superProperty, s.getObject(), s.isLiteral());
                     derived.setWeight(s.getWeight());
                     derived.getSources().addAll(s.getSources());
-                    if (addStatement(statements, derived)) changed = true;
+                    if (addStatement(statements, derived) != UNCHANGED) {
+                        changed = true;
+                        statementsTouched = true;
+                    }
                 }
             }
 
@@ -102,24 +114,17 @@ public class RdfsReasoner {
                 Statement reverse = new Statement(s.getObject(), inverse, s.getSubject(), false);
                 reverse.setWeight(s.getWeight());
                 reverse.getSources().addAll(s.getSources());
-                if (addStatement(statements, reverse)) changed = true;
-            }
-
-            List<Statement> transitiveCandidates = new ArrayList<>(statements.values());
-            for (Statement a : transitiveCandidates) {
-                if (a.isLiteral()) continue;
-                OntologyProperty p = schema.findProperty(a.getPredicate());
-                if (p == null || p.getKind() != PropertyKind.OBJECT || !p.isTransitive()) continue;
-                for (Statement b : transitiveCandidates) {
-                    if (b.isLiteral() || !a.getPredicate().equals(b.getPredicate())) continue;
-                    if (!a.getObject().equals(b.getSubject())) continue;
-                    Statement derived = new Statement(a.getSubject(), a.getPredicate(), b.getObject(), false);
-                    derived.setWeight(Math.min(a.getWeight(), b.getWeight()));
-                    derived.getSources().addAll(a.getSources());
-                    derived.getSources().addAll(b.getSources());
-                    if (addStatement(statements, derived)) changed = true;
+                if (addStatement(statements, reverse) != UNCHANGED) {
+                    changed = true;
+                    statementsTouched = true;
                 }
             }
+
+            // 闭包本身已对全部传递谓词求到不动点；没有新语句（或权重变化）时无需重算。
+            if (closureNeeded || statementsTouched) {
+                if (closeTransitive(schema, statements) != UNCHANGED) changed = true;
+            }
+            closureNeeded = false;
 
             rounds++;
         } while (changed && rounds < MAX_ROUNDS);
@@ -170,26 +175,119 @@ public class RdfsReasoner {
         return copy;
     }
 
-    private static boolean addStatement(Map<TripleKey, Statement> statements, Statement derived) {
+    /**
+     * 传递闭包：按谓词建邻接表，对每个起点做最宽路径（max-min）搜索。
+     *
+     * <p>旧的「每轮把全部语句两两配对再取 min 权重」在长链上是 O(n³)；
+     * 这里直接求最宽路径不动点，权重语义不变（路径权重 = 各段最小，
+     * 多条路径取最大），轮数从 O(n) 降到 1。</p>
+     */
+    private int closeTransitive(OntologySchema schema, Map<TripleKey, Statement> statements) {
+        Map<String, Map<String, List<Statement>>> adjacency = new LinkedHashMap<>();
+        for (Statement s : statements.values()) {
+            if (s.isLiteral() || s.getSubject() == null || s.getObject() == null) continue;
+            OntologyProperty p = schema.findProperty(s.getPredicate());
+            if (p == null || p.getKind() != PropertyKind.OBJECT || !p.isTransitive()) continue;
+            adjacency.computeIfAbsent(s.getPredicate(), k -> new LinkedHashMap<>())
+                    .computeIfAbsent(s.getSubject(), k -> new ArrayList<>())
+                    .add(s);
+        }
+
+        int changed = UNCHANGED;
+        for (Map.Entry<String, Map<String, List<Statement>>> entry : adjacency.entrySet()) {
+            String predicate = entry.getKey();
+            Map<String, List<Statement>> edges = entry.getValue();
+            for (String start : edges.keySet()) {
+                Map<String, String> parents = new LinkedHashMap<>();
+                Map<String, Statement> incoming = new LinkedHashMap<>();
+                Map<String, Double> reachable = widestReach(start, edges, parents, incoming);
+                for (Map.Entry<String, Double> target : reachable.entrySet()) {
+                    if (target.getKey().equals(start)) continue;
+                    Statement derived = new Statement(start, predicate, target.getKey(), false);
+                    derived.setWeight(target.getValue());
+                    derived.getSources().addAll(pathSources(start, target.getKey(), parents, incoming));
+                    int added = addStatement(statements, derived);
+                    if (added == INSERTED) {
+                        changed = INSERTED;
+                    } else if (added == UPDATED && changed == UNCHANGED) {
+                        changed = UPDATED;
+                    }
+                }
+            }
+        }
+        return changed;
+    }
+
+    /** 从 start 出发的最宽路径（瓶颈最大）可达集合，同时记录父指针用于回溯证据。 */
+    private static Map<String, Double> widestReach(String start, Map<String, List<Statement>> edges,
+                                                   Map<String, String> parents, Map<String, Statement> incoming) {
+        Map<String, Double> best = new LinkedHashMap<>();
+        Set<String> settled = new LinkedHashSet<>();
+        PriorityQueue<PathNode> queue = new PriorityQueue<>((a, b) -> Double.compare(b.weight, a.weight));
+        queue.add(new PathNode(start, Double.POSITIVE_INFINITY));
+        while (!queue.isEmpty()) {
+            PathNode current = queue.poll();
+            if (!settled.add(current.key)) continue;
+            for (Statement edge : edges.getOrDefault(current.key, List.of())) {
+                String next = edge.getObject();
+                if (settled.contains(next)) continue;
+                double candidate = Math.min(current.weight, edge.getWeight());
+                Double known = best.get(next);
+                if (known != null && known >= candidate) continue;
+                best.put(next, candidate);
+                parents.put(next, current.key);
+                incoming.put(next, edge);
+                queue.add(new PathNode(next, candidate));
+            }
+        }
+        return best;
+    }
+
+    private static List<String> pathSources(String start, String target,
+                                            Map<String, String> parents, Map<String, Statement> incoming) {
+        Set<String> sources = new LinkedHashSet<>();
+        String node = target;
+        Set<String> seen = new LinkedHashSet<>();
+        while (node != null && !node.equals(start) && seen.add(node)) {
+            Statement edge = incoming.get(node);
+            if (edge == null) break;
+            sources.addAll(edge.getSources());
+            node = parents.get(node);
+        }
+        return new ArrayList<>(sources);
+    }
+
+    private static final class PathNode {
+        private final String key;
+        private final double weight;
+
+        private PathNode(String key, double weight) {
+            this.key = key;
+            this.weight = weight;
+        }
+    }
+
+    private static int addStatement(Map<TripleKey, Statement> statements, Statement derived) {
         TripleKey key = new TripleKey(derived);
         // 派生语句在构造时 inferred 还是默认 false；先标成推断，merge 才不会把它当显式语句
         // 把已有推导结果降级成 explicit=false。
         derived.setInferred(true);
         Statement existing = statements.get(key);
         if (existing != null) {
-            merge(existing, derived);
-            return false;
+            return merge(existing, derived) ? UPDATED : UNCHANGED;
         }
         statements.put(key, derived);
-        return true;
+        return INSERTED;
     }
 
-    private static void merge(Statement existing, Statement incoming) {
+    private static boolean merge(Statement existing, Statement incoming) {
+        boolean raised = incoming.getWeight() > existing.getWeight();
         existing.setWeight(Math.max(existing.getWeight(), incoming.getWeight()));
         if (!incoming.isInferred()) existing.setInferred(false);
         Set<String> sources = new LinkedHashSet<>(existing.getSources());
         sources.addAll(incoming.getSources());
         existing.setSources(new ArrayList<>(sources));
+        return raised;
     }
 
     private static boolean addType(Map<String, Individual> individuals, String key, String className) {

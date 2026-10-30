@@ -7,6 +7,7 @@ import com.zifang.z.ontology.api.model.Statement;
 import com.zifang.z.ontology.core.support.TestSchemas;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -96,6 +97,48 @@ class RdfsReasonerTest {
 
         assertEquals(1, result.getIndividuals().size());
         assertEquals("alice", result.getIndividuals().get(0).getKey());
+    }
+
+    @Test
+    void computesLongChainClosureWithoutNonConvergence() {
+        OntologySchema schema = TestSchemas.people();
+        int size = 300;
+        List<Individual> in = new ArrayList<>();
+        List<Statement> edges = new ArrayList<>();
+        for (int i = 0; i < size; i++) {
+            in.add(TestSchemas.individual("e" + i, "Employee"));
+        }
+        for (int i = 0; i + 1 < size; i++) {
+            edges.add(TestSchemas.object("e" + i, "reportsTo", "e" + (i + 1)));
+        }
+
+        InferenceResult result = reasoner.infer(schema, in, edges);
+
+        assertEquals(size * (size - 1) / 2 - (size - 1), result.getInferredStatements());
+        assertTrue(statement(result, "e0", "reportsTo", "e" + (size - 1)).isInferred());
+    }
+
+    @Test
+    void transitiveClosureKeepsWidestPathWeight() {
+        OntologySchema schema = TestSchemas.people();
+        List<Individual> in = List.of(TestSchemas.individual("a", "Employee"),
+                TestSchemas.individual("b", "Employee"),
+                TestSchemas.individual("c", "Employee"),
+                TestSchemas.individual("d", "Employee"));
+        Statement ab = TestSchemas.object("a", "reportsTo", "b");
+        ab.setWeight(0.9);
+        Statement bd = TestSchemas.object("b", "reportsTo", "d");
+        bd.setWeight(0.3);
+        Statement ac = TestSchemas.object("a", "reportsTo", "c");
+        ac.setWeight(0.8);
+        Statement cd = TestSchemas.object("c", "reportsTo", "d");
+        cd.setWeight(0.6);
+
+        InferenceResult result = reasoner.infer(schema, in, List.of(ab, bd, ac, cd));
+
+        assertEquals(0.6, statement(result, "a", "reportsTo", "d").getWeight(), 1e-9);
+        assertEquals(0.3, statement(result, "b", "reportsTo", "d").getWeight(), 1e-9);
+        assertEquals(0.8, statement(result, "a", "reportsTo", "c").getWeight(), 1e-9);
     }
 
     private static Individual individual(InferenceResult result, String key) {
