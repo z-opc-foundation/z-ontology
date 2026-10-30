@@ -28,3 +28,8 @@ zont-data/
 # 临时文件
 *.tmp
 *.bak
+
+# 临时运行态（规范：一律写 .cache/）
+/.cache/
+**/__pycache__/
+*.pyc

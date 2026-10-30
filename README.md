@@ -170,7 +170,7 @@ curl -s 'localhost:8890/api/ontology/people/instances?workspace=team&className=P
 
 ---
 
-## 📚 文档目录
+## 文档目录
 
 | 文档 | 内容 |
 |------|------|
