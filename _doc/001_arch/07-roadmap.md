@@ -36,3 +36,5 @@
 5. **查询面**：在 `/neighbors`、`/subgraph` 之上加路径查询 / 模式匹配。
 6. **前端**：本体编辑与图可视化（沿用 z-frontend-common 的域前端规范，落 `_frontend/`）。
 7. **发布**：`1.0.0` 走 `-Pcentral` 发到 Maven Central，并在 lead 的 `003_辅助能力/bootstrap/manifest.json` 登记版本。
+8. **图改写（A 本体 → B 本体）**：规则 DSL + 两阶段执行器 + fork/pipeline 两种玩法，方案见
+   [`08-rewrite-and-fork.md`](08-rewrite-and-fork.md)（含 z-graph 1.0.8 实测读数与三个引擎缺陷）。

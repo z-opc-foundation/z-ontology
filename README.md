@@ -179,6 +179,7 @@ curl -s 'localhost:8890/api/ontology/people/instances?workspace=team&className=P
 | [`_doc/001_arch/02-api.md`](_doc/001_arch/02-api.md) | REST 契约、请求/响应模型、错误码 |
 | [`_doc/001_arch/03-ontology-model.md`](_doc/001_arch/03-ontology-model.md) | 本体模型、推理规则、校验码、图映射规则 |
 | [`_doc/001_arch/07-roadmap.md`](_doc/001_arch/07-roadmap.md) | M1 范围、已知限制、后续演进 |
+| [`_doc/001_arch/08-rewrite-and-fork.md`](_doc/001_arch/08-rewrite-and-fork.md) | 图改写设计稿：A→B 本体 DSL / fork / pipeline（未实现） |
 | [`_doc/005_testing/01-test-report.md`](_doc/005_testing/01-test-report.md) | 测试清单与实测结论 |
 
 ---
