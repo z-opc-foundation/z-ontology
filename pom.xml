@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        z-ontology —— 本体层（TBox / ABox / 推理 / 校验），负责把知识库里的实体关系
+        组织成一张有类型、有约束、可推理的图结构。
+
+        边界：
+          * z-kb 管知识与检索（文档 → 块 → 实体/关系）；
+          * z-graph 管图存储；
+          * z-ontology 管“知识应该长成什么形状”：本体 Schema、RDFS 子集推理、
+            一致性校验、物化到 z-graph。
+
+        工程形状沿用 z-kb / z-graph：z-boot-parent 1.2.0 + Java 17 + flatt​en(oss)。
+    -->
+    <parent>
+        <groupId>io.github.yuku123</groupId>
+        <artifactId>z-boot-parent</artifactId>
+        <version>1.2.0</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>io.github.yuku123</groupId>
+    <artifactId>z-ontology</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+
+    <name>z-ontology :: root</name>
+    <description>
+        本体实现：类/属性/公理（TBox）+ 个体/断言（ABox）+ RDFS 子集推理 +
+        一致性校验 + 物化到 z-graph；可接入 z-kb 的实体关系作为知识来源。
+    </description>
+
+    <url>https://github.com/z-opc-foundation/z-ontology</url>
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+    <developers>
+        <developer>
+            <id>yuku123</id>
+            <name>yuku123</name>
+            <email>1340947819@qq.com</email>
+            <organization>z-opc-foundation</organization>
+            <organizationUrl>https://github.com/z-opc-foundation</organizationUrl>
+            <timezone>+08:00</timezone>
+            <roles>
+                <role>owner</role>
+            </roles>
+        </developer>
+    </developers>
+    <scm>
+        <connection>scm:git:https://github.com/z-opc-foundation/z-ontology.git</connection>
+        <developerConnection>scm:git:git@github.com:z-opc-foundation/z-ontology.git</developerConnection>
+        <url>https://github.com/z-opc-foundation/z-ontology</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <modules>
+        <module>z-ontology-api</module>
+        <module>z-ontology-core</module>
+        <module>z-ontology-graph</module>
+        <module>z-ontology-kb</module>
+        <module>z-ontology-spring-boot-starter</module>
+        <module>z-ontology-web</module>
+        <module>z-ontology-bootstrap</module>
+    </modules>
+
+    <properties>
+        <!-- 本仓版本号只写在这里；子模块一律继承。 -->
+        <!-- 接入面版本：父链（z-boot-fleet）钉的是 z-kb 1.0.7 / z-util 1.0.22，
+             本仓需要 z-kb-api 1.1.0（Java 17 版本线）与 JsonUtil 1.2.2 的
+             fromJson/toJson 契约 ⇒ 逐坐标写直接条目顶住父链。 -->
+        <z-kb.version>1.1.0</z-kb.version>
+        <z-graph.version>1.0.8</z-graph.version>
+        <z-util.version>1.2.2</z-util.version>
+        <!-- springdoc 2.6.0 由父链下发；Swagger 注解用 jakarta 变体，父链只有 2.1.2，
+             这里抬到 2.2.22（@Schema.RequiredMode 需要 >= 2.2.6）。 -->
+        <swagger-annotations.version>2.2.22</swagger-annotations.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- 自家 reactor 坐标：子模块依赖不写版本。 -->
+            <dependency>
+                <groupId>io.github.yuku123</groupId>
+                <artifactId>z-ontology</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.yuku123</groupId>
+                <artifactId>z-ontology-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.yuku123</groupId>
+                <artifactId>z-ontology-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.yuku123</groupId>
+                <artifactId>z-ontology-graph</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.yuku123</groupId>
+                <artifactId>z-ontology-kb</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.yuku123</groupId>
+                <artifactId>z-ontology-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.yuku123</groupId>
+                <artifactId>z-ontology-web</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.github.yuku123</groupId>
+                <artifactId>z-kb-api</artifactId>
+                <version>${z-kb.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.yuku123</groupId>
+                <artifactId>z-graph-api</artifactId>
+                <version>${z-graph.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.yuku123</groupId>
+                <artifactId>z-graph-core</artifactId>
+                <version>${z-graph.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.yuku123</groupId>
+                <artifactId>z-util-core</artifactId>
+                <version>${z-util.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.yuku123</groupId>
+                <artifactId>z-util-parser-json</artifactId>
+                <version>${z-util.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.yuku123</groupId>
+                <artifactId>z-util-dsl-kernel</artifactId>
+                <version>${z-util.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.swagger.core.v3</groupId>
+                <artifactId>swagger-annotations-jakarta</artifactId>
+                <version>${swagger-annotations.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- 全仓统一测试台：JUnit 5（父链 DM 下发版本）。 -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- flatten(oss) 常开：发布件自包含、剥 parent 链。父链的 flatten 是
+                 inherited=false，不会下发给消费仓，所以本仓必须自己声明。 -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <version>1.5.0</version>
+                <inherited>true</inherited>
+                <configuration>
+                    <updatePomFile>true</updatePomFile>
+                    <flattenMode>oss</flattenMode>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>flatten</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>flatten</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>flatten.clean</id>
+                        <phase>clean</phase>
+                        <goals>
+                            <goal>clean</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>central</id>
+            <properties>
+                <maven.javadoc.skip>false</maven.javadoc.skip>
+                <central.gpg.skip>false</central.gpg.skip>
+            </properties>
+            <distributionManagement>
+                <repository>
+                    <id>central</id>
+                    <url>https://central.sonatype.com</url>
+                </repository>
+                <snapshotRepository>
+                    <id>central</id>
+                    <url>https://central.sonatype.com</url>
+                </snapshotRepository>
+            </distributionManagement>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-deploy-plugin</artifactId>
+                        <version>3.1.4</version>
+                        <configuration><skip>true</skip></configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.3.0</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals><goal>jar-no-fork</goal></goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.11.2</version>
+                        <configuration>
+                            <doclint>none</doclint>
+                            <failOnError>false</failOnError>
+                            <failOnWarnings>false</failOnWarnings>
+                            <quiet>true</quiet>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <phase>verify</phase>
+                                <goals><goal>jar</goal></goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.7</version>
+                        <configuration>
+                            <skip>${central.gpg.skip}</skip>
+                            <gpgArguments>
+                                <arg>--pinentry-mode</arg>
+                                <arg>loopback</arg>
+                                <arg>--no-tty</arg>
+                            </gpgArguments>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals><goal>sign</goal></goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.8.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <tokenAuth>true</tokenAuth>
+                            <autoPublish>true</autoPublish>
+                            <waitUntil>uploaded</waitUntil>
+                            <waitMaxTime>1800</waitMaxTime>
+                            <waitPollingInterval>10</waitPollingInterval>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>

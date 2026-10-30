@@ -1,0 +1,30 @@
+# Java 构建产物
+*.class
+/target/
+*/target/
+*.flattened-pom.xml
+.flattened-pom.xml
+*.jar
+*/*.jar
+*.log
+/logs
+*/logs/
+
+# IDE
+.idea/
+*.iml
+
+# macOS
+.DS_Store
+
+# Maven 发布凭证
+.env
+.gnupg/
+
+# 本地运行状态（默认落 ~/.zont；若有人改成相对路径也不要入库）
+data/
+zont-data/
+
+# 临时文件
+*.tmp
+*.bak

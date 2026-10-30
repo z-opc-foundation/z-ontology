@@ -1,0 +1,31 @@
+server:
+  port: 8890
+
+spring:
+  application:
+    name: z-ontology
+
+zont:
+  enabled: true
+  # 本体 Schema 的本地落盘目录；物化后的图默认在进程内存里（与 z-kb 的默认图谱口径一致）
+  storage-path: ~/.zont/ontologies
+  default-workspace: default
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    com.zifang.z.ontology: INFO
