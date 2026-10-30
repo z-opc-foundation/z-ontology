@@ -79,3 +79,5 @@
 
 > 注：bootstrap 里 log4j2 是显式加的（父链会把 `spring-boot-starter-logging` 的传递依赖清空），
 > 不加会出现 “No SLF4J providers were found” 且看不到启动日志。
+
+> 全链路（REST 全接口 / 图改写与 fork / 重启持久化）验收见 [02-fullstack-acceptance-2026-10-31.md](02-fullstack-acceptance-2026-10-31.md)。
