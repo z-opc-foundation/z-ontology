@@ -29,6 +29,11 @@
             <groupId>io.github.yuku123</groupId>
             <artifactId>z-graph-core</artifactId>
         </dependency>
+        <!-- JsonlGraphStore 的日志行解析走 z-util 的 JSON 门面。 -->
+        <dependency>
+            <groupId>io.github.yuku123</groupId>
+            <artifactId>z-util-parser-json</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>

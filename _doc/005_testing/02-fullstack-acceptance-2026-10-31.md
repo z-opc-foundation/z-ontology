@@ -95,6 +95,9 @@ M2 的增量/按需闭包必须带上深度上限与去重（见 08 文档 §5.6
 结论：**Schema 持久、物化图不持久**。默认装配是 `InMemoryGraphStore`，这是独立启动器的既定行为，
 但对「持续洗数」的 pipeline 是硬阻塞。
 
+> **2026-10-31 已修**：新增 `JsonlGraphStore`（JSONL 追加日志 + 启动重放 + 自动压实），
+> 配置 `zont.graph.path` 即落盘，留空退回进程内存储。见 §5.3 与 §6 P1 行。
+
 ### 5.2 端口级探针：持久 store + 新端口实例
 
 假设宿主换用持久化 `GraphStore`，重启后新 `ZGraphOntologyPort` 的行为：
@@ -117,30 +120,59 @@ M2 的增量/按需闭包必须带上深度上限与去重（见 08 文档 §5.6
 > `port-restart-probe.log` 里那段 `Rule 'json' failed to match` 堆栈是 R1.5 **故意**写入损坏 JSON 触发的
 > 告警日志，随后 `list()` 正常跳过，不是失败。
 
+### 5.3 修复后复测（P1 + P2 收口，2026-10-31 同日）
+
+P1 由本会话实现（`JsonlGraphStore` + `zont.graph.path` 装配），P2 由并行会话实现
+（`__ontKey` 落属性 + scope 索引懒重建 + 原子批量写契约，commit `d19b4f3`）。两笔合入后全 reactor
+`mvn -B clean verify` 绿（59 例：core 34 / graph 13 / kb 7 / web 3 / bootstrap 2）。
+
+端口级复测 `OntologyPortRestartProbe2`：**13/13 PASS**（`port-restart-probe2.log`）。
+
+| 编号 | 检查 | 结果 |
+|------|------|------|
+| R2.3 | JsonlGraphStore 关闭重开后，端口节点/边数原样恢复（索引懒重建） | ✅ |
+| R2.4 | 重启后 `findNode` 命中，属性/labels 完整 | ✅ |
+| R2.6 | 重启后邻居查询可用 | ✅ |
+| R2.7 | 同 key 重复 upsert 幂等（存储不涨、值更新） | ✅ |
+| R2.8 | 新实例 `reset` 清空整 scope（孤儿不再泄漏） | ✅ |
+| R3.1–R3.4 | legacy 数据（无 `__ontKey`）按物化器约定回推 key；无关 scope 不误收；reset+重写自愈 | ✅ |
+
+真进程级复测（bootstrap 18890，`--zont.graph.path=/tmp/zont-rest2/graph`）：
+
+* 物化 restart 工作区（15 节点 / 17 边）→ `kill` → 重启 → `stats` 逐项一致；
+  `lastMaterializedAt` / `explicitStatements` / `inferredStatements` 归零属预期——三者来自
+  `DefaultOntologyService.lastReports` 进程内报告缓存（`DefaultOntologyService.java:50`，stats 在
+  :208 合并），是「上一次物化」的会话元数据而非图数据；图本体四项计数
+  （classNodes/individualNodes/nodeCount/edgeCount）全部持久恢复。
+* 重启后重复物化幂等：仍 15 节点 / 17 边，个体不重复。
+* 证据：`restart-service-1.log` / `restart-service-2.log` / `stats-before.json` / `stats-after.json`。
+
 ## 6. 缺陷与观察
 
-| 编号 | 级别 | 现象 | 影响 | 证据 |
-|------|------|------|------|------|
-| P1 | 阻塞 M2 | 物化图只在内存，重启归零 | pipeline 断点续洗、审计、fork 基线都无处落 | §5.1 |
-| P2 | 阻塞 M2（换持久 store 时） | 端口 scope 索引不持久：孤儿、reset 失效、重复 upsert | 图越跑越脏，清洗结果不可重复 | §5.2 R2.2–R2.7 |
-| O1 | 装配观察 | 独立启动器 `/sources` 恒 `[]`，`validate-source` / `materialize?source=` 不可用 | 只因 bootstrap 没有 z-kb 的 `KnowledgeGraphStore`；宿主带 z-kb 时可用 | G1.4 / G4.6 / G6.1 |
-| O2 | 契约观察 | `DELETE /schemas/{id}` 对不存在 id 也回 204 | 幂等但无法区分「删了」与「本来没有」 | G2.10 |
-| O3 | 契约观察 | `ValidationReport` JSON 字段名是 `valid`（Jackson 由 `isValid()` 推导） | 客户端按 `isValid` 读会拿到 null | G4.1 |
-| O4 | 引擎已知缺陷 | z-graph 1.0.8：内联属性过滤被忽略、`MATCH..CREATE/MERGE` 静默不写、带内联属性的边模式报错 | 改写 DSL 必须避开，按两阶段执行器实现 | [08 文档 §6](../001_arch/08-rewrite-and-fork.md) |
+| 编号 | 级别 | 现象 | 影响 | 状态 | 证据 |
+|------|------|------|------|------|------|
+| P1 | 阻塞 M2 | 物化图只在内存，重启归零 | pipeline 断点续洗、审计、fork 基线都无处落 | **已修**：`JsonlGraphStore`（JSONL 追加日志+重放+自动压实），`zont.graph.path` 配置落盘 | §5.1 / §5.3 |
+| P2 | 阻塞 M2（换持久 store 时） | 端口 scope 索引不持久：孤儿、reset 失效、重复 upsert | 图越跑越脏，清洗结果不可重复 | **已修**（`d19b4f3`）：scoped key 落 `__ontKey` + 索引懒重建（兼容 legacy 回推）；upsert 幂等、reset 跨实例生效 | §5.2 / §5.3 |
+| O1 | 装配观察 | 独立启动器 `/sources` 恒 `[]`，`validate-source` / `materialize?source=` 不可用 | 只因 bootstrap 没有 z-kb 的 `KnowledgeGraphStore`；宿主带 z-kb 时可用 | 未处置 | G1.4 / G4.6 / G6.1 |
+| O2 | 契约观察 | `DELETE /schemas/{id}` 对不存在 id 也回 204 | 幂等但无法区分「删了」与「本来没有」 | 未处置 | G2.10 |
+| O3 | 契约观察 | `ValidationReport` JSON 字段名是 `valid`（Jackson 由 `isValid()` 推导） | 客户端按 `isValid` 读会拿到 null | 未处置 | G4.1 |
+| O4 | 引擎已知缺陷 | z-graph 1.0.8：内联属性过滤被忽略、`MATCH..CREATE/MERGE` 静默不写、带内联属性的边模式报错 | 改写 DSL 必须避开，按两阶段执行器实现 | 未处置（属 z-graph 仓） | [08 文档 §6](../001_arch/08-rewrite-and-fork.md) |
 
-处置建议（待裁定，未改动代码）：
+处置记录：
 
-1. **P1 + P2 一起收**：给 `ZGraphOntologyPort` 换成可持久化的 scope 索引（或让索引可从 store 重建：
-   按 `ontologyId`/`workspace` 属性扫描 + 边 key 重建），并补重启后 `reset`/幂等的回归用例。
-2. **O1**：要么在 bootstrap 加一个可选的 z-kb 存储 profile，要么在端口文档里明确「独立模式无来源」。
-3. **O3**：若要对外发布 SDK，建议加 `@JsonProperty("isValid")` 或改 getter 名，避免契约歧义。
-4. **O2**：维持 204 幂等可接受，但应在 API 文档显式写明。
+1. **P1 + P2 已收**（2026-10-31）：P1 本会话、P2 并行会话（`d19b4f3`）；合入后全 reactor 绿 +
+   端口级 13/13 + 真进程重启复测通过，回归用例入 `JsonlGraphStoreTest` / `ZGraphOntologyPortTest`。
+2. **O1**：待裁定——bootstrap 加可选 z-kb 存储 profile，或在端口文档明确「独立模式无来源」。
+3. **O3**：若对外发布 SDK，加 `@JsonProperty("isValid")` 或改 getter 名。
+4. **O2**：维持 204 幂等可接受，应在 API 文档显式写明。
 
 ## 7. M2 放行判断
 
 * 引擎能力边界已量化：**可用**（两阶段执行器已覆盖样例与规模），**不可用**（原生 Cypher 一步改写）。
 * 事务语义已具备：rollback、并发 `StaleHeadException`、字段级自动合并、fast-forward、冲突不动 head。
-* 放行条件只剩持久化（P1/P2）；在这两项收口前，pipeline 模式只能做到「进程内正确」。
+* ~~放行条件只剩持久化（P1/P2）~~ → **2026-10-31 已收口**：`JsonlGraphStore` 落盘 + 索引懒重建 +
+  原子批量写，全 reactor 绿 + 双层重启复测通过（§5.3）。**M2 持久化闸门已清**，pipeline 模式具备
+  断点续洗与重启恢复能力。
 
 ## 8. 证据索引
 
@@ -151,8 +183,12 @@ M2 的增量/按需闭包必须带上深度上限与去重（见 08 文档 §5.6
 | `mvn-verify.log` | L1 全 reactor 构建与 46 例单测 |
 | `rest_probe.py` / `rest-probe.log` / `rest-probe-rerun.log` / `rest-probe.jsonl` | L2 探针源码、两次运行、逐请求响应 |
 | `OntoRewriteProbe3.java` / `probe3.clean.log` | L3 改写/fork 探针与 32 项读数（原始日志含 NUL，用 `tr -d '\000'` 清洗） |
-| `OntologyPortRestartProbe.java` / `port-restart-probe.log` | L4 端口级 13 项 |
-| `service.log` / `service-after-restart.log` | 服务启动与重启日志 |
+| `OntologyPortRestartProbe.java` / `port-restart-probe.log` | L4 端口级 13 项（修复前缺陷取证，保留作对照） |
+| `OntologyPortRestartProbe2.java` / `port-restart-probe2.log` | L4 复测 13 项（P1+P2 修复后：恢复/幂等/reset/legacy 回推） |
+| `mvn-verify-final.log` | P1+P2 合入后的全 reactor `clean verify`（59 例全绿） |
+| `restart-service-1.log` / `restart-service-2.log` | 真进程重启两轮服务日志（含 `物化图持久化文件` 装配行） |
+| `stats-before.json` / `stats-after.json` | 重启前后 stats 逐项对比（15 节点 / 17 边一致） |
+| `service.log` / `service-after-restart.log` | 早期服务启动与重启日志 |
 | `cp-graph.txt` | L3 探针的 z-graph 1.0.8 classpath 快照 |
 
 ## 9. 复现
@@ -161,9 +197,10 @@ M2 的增量/按需闭包必须带上深度上限与去重（见 08 文档 §5.6
 # L1
 cd z-ontology && mvn -B clean verify
 
-# L2：先起服务（8890 被占用时换端口）
+# L2：先起服务（8890 被占用时换端口；zont.graph.path 配上即落盘持久化）
 java -jar z-ontology-bootstrap/target/z-ontology-bootstrap-1.0.0.jar \
-  --server.port=18890 --zont.storage-path=/tmp/zont-rest/ontologies
+  --server.port=18890 --zont.storage-path=/tmp/zont-rest/ontologies \
+  --zont.graph.path=/tmp/zont-rest/graph
 python3 rest_probe.py
 
 # L3 / L4：按证据目录里的 classpath 快照编译运行

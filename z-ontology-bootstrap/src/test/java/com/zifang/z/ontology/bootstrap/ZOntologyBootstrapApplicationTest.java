@@ -1,11 +1,13 @@
 package com.zifang.z.ontology.bootstrap;
 
+import com.zifang.z.graph.api.GraphStore;
 import com.zifang.z.ontology.api.graph.GraphNode;
 import com.zifang.z.ontology.api.model.Individual;
 import com.zifang.z.ontology.api.model.MaterializationReport;
 import com.zifang.z.ontology.api.service.OntologyGraphPort;
 import com.zifang.z.ontology.api.service.OntologyService;
 import com.zifang.z.ontology.graph.adapter.ZGraphOntologyPort;
+import com.zifang.z.ontology.graph.store.JsonlGraphStore;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,7 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(classes = ZOntologyBootstrapApplication.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@TestPropertySource(properties = "zont.storage-path=${java.io.tmpdir}/zont-boot-test-${random.uuid}")
+@TestPropertySource(properties = {
+        "zont.storage-path=${java.io.tmpdir}/zont-boot-test-${random.uuid}",
+        "zont.graph.path=${java.io.tmpdir}/zont-boot-graph-${random.uuid}"
+})
 class ZOntologyBootstrapApplicationTest {
 
     @Autowired
@@ -28,10 +33,14 @@ class ZOntologyBootstrapApplicationTest {
     @Autowired
     private OntologyGraphPort graphPort;
 
+    @Autowired
+    private GraphStore graphStore;
+
     @Test
     void wiresKbSchemaAndZGraphPort() {
         assertTrue(service.findSchema("kb").isPresent());
         assertInstanceOf(ZGraphOntologyPort.class, graphPort);
+        assertInstanceOf(JsonlGraphStore.class, graphStore);
     }
 
     @Test

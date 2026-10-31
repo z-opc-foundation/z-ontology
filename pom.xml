@@ -292,6 +292,13 @@
                             <waitUntil>uploaded</waitUntil>
                             <waitMaxTime>1800</waitMaxTime>
                             <waitPollingInterval>10</waitPollingInterval>
+                            <!-- 本插件不认 maven.deploy.skip，没排除的模块照样进 bundle
+                                 （实测结论见 z-agent/pom.xml 同位置注释）⇒ 不可发布的模块点名列出。
+                              · z-ontology-bootstrap：独立启动器（Spring Boot 可执行应用，默认端口 8890），
+                                  产物是执行 fat jar，不是别仓可引的库件。 -->
+                            <excludeArtifacts>
+                                <excludeArtifact>z-ontology-bootstrap</excludeArtifact>
+                            </excludeArtifacts>
                         </configuration>
                     </plugin>
                 </plugins>

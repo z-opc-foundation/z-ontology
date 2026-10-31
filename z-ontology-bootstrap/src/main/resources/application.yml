@@ -7,9 +7,12 @@ spring:
 
 zont:
   enabled: true
-  # 本体 Schema 的本地落盘目录；物化后的图默认在进程内存里（与 z-kb 的默认图谱口径一致）
+  # 本体 Schema 的本地落盘目录
   storage-path: ~/.zont/ontologies
   default-workspace: default
+  # 物化图的 JSONL 持久化文件目录；留空则退回进程内存储（重启丢失）
+  graph:
+    path: ~/.zont/graph
 
 management:
   endpoints:
