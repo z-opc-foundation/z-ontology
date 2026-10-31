@@ -27,10 +27,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -47,7 +47,7 @@ public class DefaultOntologyService implements OntologyService {
     private final OntologyGraphPort graphPort;
     private final OntologySchemaValidator schemaValidator = new OntologySchemaValidator();
     private final List<OntologySource> sources = new CopyOnWriteArrayList<>();
-    private final Map<String, MaterializationReport> lastReports = new LinkedHashMap<>();
+    private final Map<String, MaterializationReport> lastReports = new ConcurrentHashMap<>();
 
     public DefaultOntologyService(OntologyStore store, RdfsReasoner reasoner, OntologyValidator validator,
                                   OntologyMaterializer materializer, OntologyGraphPort graphPort) {

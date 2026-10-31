@@ -41,6 +41,32 @@ public class OntologyMaterializer {
                                              OntologyGraphPort port) {
         long start = System.currentTimeMillis();
         String ontologyId = schema.getId();
+        boolean atomic = port.supportsAtomicBatch();
+        if (atomic) {
+            port.beginAtomicBatch();
+        }
+        try {
+            MaterializationReport report = doMaterialize(schema, workspace, sourceId, inference, validation, port,
+                    ontologyId, start);
+            if (atomic) {
+                port.commitAtomicBatch();
+            }
+            return report;
+        } catch (RuntimeException e) {
+            if (atomic) {
+                try {
+                    port.rollbackAtomicBatch();
+                } catch (RuntimeException ignore) {
+                    // 回滚失败不掩盖原始异常
+                }
+            }
+            throw e;
+        }
+    }
+
+    private MaterializationReport doMaterialize(OntologySchema schema, String workspace, String sourceId,
+                                                InferenceResult inference, ValidationReport validation,
+                                                OntologyGraphPort port, String ontologyId, long start) {
         port.reset(ontologyId, workspace);
 
         int classNodes = 0;

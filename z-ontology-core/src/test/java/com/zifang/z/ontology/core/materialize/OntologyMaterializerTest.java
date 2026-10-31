@@ -19,6 +19,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OntologyMaterializerTest {
@@ -106,6 +107,43 @@ class OntologyMaterializerTest {
         assertEquals(nodesAfterFirst, port.nodeCount(ONT, WS));
         assertEquals(edgesAfterFirst, port.edgeCount(ONT, WS));
         assertEquals(first.getEdges(), second.getEdges());
+    }
+
+    @Test
+    void leavesPreviousMaterializationIntactWhenWriteFailsMidway() {
+        OntologySchema schema = TestSchemas.people();
+        List<Individual> individuals = List.of(TestSchemas.individual("alice", "Person"),
+                TestSchemas.individual("acme", "Organization"));
+        List<Statement> statements = List.of(TestSchemas.object("alice", "worksFor", "acme"));
+
+        BombPort failing = new BombPort();
+        InferenceResult inference = reasoner.infer(schema, individuals, statements);
+        ValidationReport validation = validator.validate(schema, inference);
+        materializer.materialize(schema, WS, "test", inference, validation, failing);
+        long nodesBefore = failing.nodeCount(ONT, WS);
+        long edgesBefore = failing.edgeCount(ONT, WS);
+        failing.armed = true;
+
+        assertThrows(IllegalStateException.class,
+                () -> materializer.materialize(schema, WS, "test", inference, validation, failing));
+
+        assertEquals(nodesBefore, failing.nodeCount(ONT, WS));
+        assertEquals(edgesBefore, failing.edgeCount(ONT, WS));
+        assertNotNull(failing.findNode(ONT, WS, "individual:alice"));
+    }
+
+    /** 在第 N 次 upsertEdge 时爆炸，模拟物化中途失败。 */
+    private static final class BombPort extends SimpleOntologyGraphPort {
+        private boolean armed;
+
+        @Override
+        public synchronized void upsertEdge(String ontologyId, String workspace, String key, String type,
+                                            String fromKey, String toKey, java.util.Map<String, Object> properties) {
+            if (armed) {
+                throw new IllegalStateException("boom");
+            }
+            super.upsertEdge(ontologyId, workspace, key, type, fromKey, toKey, properties);
+        }
     }
 
     private MaterializationReport materialize(OntologySchema schema, List<Individual> individuals,

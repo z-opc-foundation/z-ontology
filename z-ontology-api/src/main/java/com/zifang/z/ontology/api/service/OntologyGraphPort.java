@@ -35,4 +35,27 @@ public interface OntologyGraphPort {
     long nodeCount(String ontologyId, String workspace);
 
     long edgeCount(String ontologyId, String workspace);
+
+    /**
+     * 批量原子写能力：begin 之后、commit 之前，该线程对本端口的 reset / upsert
+     * 暂不生效；commit 让整批一次性生效，rollback 丢弃整批。
+     *
+     * <p>物化器用它保证「reset 之后中途失败不留半成品」。默认不支持，
+     * 实现类按后端能力覆盖。</p>
+     */
+    default boolean supportsAtomicBatch() {
+        return false;
+    }
+
+    default void beginAtomicBatch() {
+        throw new UnsupportedOperationException("this port does not support atomic batches");
+    }
+
+    default void commitAtomicBatch() {
+        throw new UnsupportedOperationException("this port does not support atomic batches");
+    }
+
+    default void rollbackAtomicBatch() {
+        throw new UnsupportedOperationException("this port does not support atomic batches");
+    }
 }
