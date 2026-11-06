@@ -19,7 +19,7 @@
 |------|-----|
 | **仓库** | `z-ontology` |
 | **Maven 坐标** | `io.github.yuku123:z-ontology:1.0.0`（字面版本号，非 `${revision}`；flatten-maven-plugin 1.5.0 `oss` 模式常开） |
-| **父项目** | `io.github.yuku123:z-boot-parent:1.2.0`（`<relativePath/>` 留空） |
+| **父项目** | `io.github.yuku123:z-boot-parent:1.2.1`（`<relativePath/>` 留空） |
 | **对外发布** | **尚未发到 Maven Central**；`-Pcentral` 已备好（签名 / sources / javadoc / central-publishing），发版属人工保留项 |
 | **默认端口** | `8890`（`z-ontology-bootstrap/src/main/resources/application.yml`） |
 | **运行口径** | Java 17 · Spring Boot 3.3.13（父链下发） |
